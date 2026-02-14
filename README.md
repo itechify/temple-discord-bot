@@ -8,6 +8,7 @@ Simple Discord bot for a Sorcery TCG server that provides `/lfg` queueing by for
 - `/lfg leave`
 - `/lfg status`
 - `/lfg help`
+- `[[card name]]` lookup in any guild channel (supports multiple per message)
 - Queue timeout with auto-cleanup (`QUEUE_TTL_MINUTES`, default `30`)
 - Instant matching when enough players join the same format
 - Best-effort DM notifications for matches and queue expiry
@@ -42,6 +43,10 @@ cp .env.example .env
 - `GUILD_ID`: Dev guild ID (recommended for fast slash command registration)
 - `QUEUE_TTL_MINUTES`: Queue TTL in minutes (default `30`)
 - `LFG_CHANNEL_NAME`: Must match channel name (default `lfg-sorcery`)
+- `EMOJI_AIR`: Card threshold emoji for air (default `🜁`)
+- `EMOJI_EARTH`: Card threshold emoji for earth (default `🜃`)
+- `EMOJI_FIRE`: Card threshold emoji for fire (default `🜂`)
+- `EMOJI_WATER`: Card threshold emoji for water (default `🜄`)
 
 ## Run
 
@@ -87,6 +92,8 @@ Use OAuth2 URL Generator with:
   - `Use Slash Commands`
   - `View Channels`
   - `Read Message History` (optional but useful)
+- Privileged Gateway Intents:
+  - `Message Content` (required for `[[card name]]` lookups)
 
 DMs can fail if users disable DMs from server members; bot handles this gracefully.
 
@@ -127,11 +134,21 @@ Ephemeral usage summary:
 - `/lfg leave`
 - `/lfg status`
 
+### Card lookup by message
+
+- Mention cards in any guild channel with `[[double braces]]`.
+- Example: `[[Apprentice Wizard]]`
+- Multiple in one message are supported.
+- Matching is case-insensitive and supports light misspellings.
+- Bot replies in the same channel with card details from `cards.json`.
+
 ## Project Structure
 
 ```text
 src/
   index.ts
+  cards/
+    lookup.ts
   commands/
     lfg.ts
   lfg/

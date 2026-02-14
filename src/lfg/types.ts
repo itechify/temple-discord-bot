@@ -51,6 +51,7 @@ export interface FormatStatus {
   format: LfgFormat;
   count: number;
   oldestWaitMs: number | null;
+  queuedUserIds: string[];
 }
 
 export interface UserQueueStatus {

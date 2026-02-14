@@ -234,7 +234,9 @@ export async function ensureLfgPanelForGuild(
     });
   }
 
-  const sent = await channel.send(buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes));
+  const sent = await channel.send(
+    buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes),
+  );
   panelMessages.set(guild.id, { channelId: channel.id, messageId: sent.id });
 }
 
@@ -344,25 +346,29 @@ function buildPanelMessage(
 } {
   const status = queue.status(guildId, "panel-user");
   const totalWaiting = status.formats.reduce((acc, item) => acc + item.count, 0);
-
-  const c = status.formats.find((f) => f.format === "constructed")?.count ?? 0;
-  const s = status.formats.find((f) => f.format === "sealed")?.count ?? 0;
-  const m = status.formats.find((f) => f.format === "multiplayer")?.count ?? 0;
+  const constructed = status.formats.find((f) => f.format === "constructed");
+  const sealed = status.formats.find((f) => f.format === "sealed");
+  const multiplayer = status.formats.find((f) => f.format === "multiplayer");
+  const c = constructed?.count ?? 0;
+  const s = sealed?.count ?? 0;
+  const m = multiplayer?.count ?? 0;
+  const waitingLines = buildWaitingLinesByFormat([
+    { emoji: "🛠️", userIds: constructed?.queuedUserIds ?? [] },
+    { emoji: "📦", userIds: sealed?.queuedUserIds ?? [] },
+    { emoji: "👥", userIds: multiplayer?.queuedUserIds ?? [] },
+  ]);
 
   const embed = new EmbedBuilder()
     .setTitle("🧙‍♂️ LFG Queue")
     .setColor(totalWaiting > 0 ? 0x57f287 : 0xed4245)
     .setDescription(
       [
-        totalWaiting > 0
-          ? `**${totalWaiting} sorcerer(s)** looking to test their skills!`
-          : "No one in queue! ✅",
-        "",
         "```",
         `🛠️ Constructed:  ${c}/2`,
         `📦 Sealed:       ${s}/2`,
         `👥 Multiplayer:  ${m}/4`,
         "```",
+        ...waitingLines,
         `Pick a format to join. Auto-expires in **${queueTtlMinutes} min**.`,
       ].join("\n"),
     )
@@ -436,7 +442,9 @@ async function bumpPanelToBottom(guild: Guild | null, context: LfgCommandContext
 
   await deleteDuplicatePanelMessages(guild, channel, null, context.logger);
 
-  const sent = await channel.send(buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes));
+  const sent = await channel.send(
+    buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes),
+  );
   panelMessages.set(guild.id, { channelId: channel.id, messageId: sent.id });
 }
 
@@ -559,6 +567,23 @@ function humanizeDuration(ms: number): string {
   }
 
   return `${minutes}m ${seconds}s`;
+}
+
+function buildWaitingLinesByFormat(groups: Array<{ emoji: string; userIds: string[] }>): string[] {
+  const lines: string[] = [];
+
+  for (const group of groups) {
+    for (const userId of group.userIds) {
+      lines.push(`- ${userMention(userId)} (${group.emoji})`);
+    }
+  }
+
+  if (lines.length > 0) {
+    lines.unshift("__Queue__");
+    lines.push("");
+  }
+
+  return lines;
 }
 
 export { FORMATS };

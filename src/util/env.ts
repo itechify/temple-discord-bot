@@ -9,6 +9,10 @@ export interface Env {
   GUILD_ID?: string;
   QUEUE_TTL_MINUTES: number;
   LFG_CHANNEL_NAME: string;
+  EMOJI_AIR: string;
+  EMOJI_EARTH: string;
+  EMOJI_FIRE: string;
+  EMOJI_WATER: string;
 }
 
 function required(name: string): string {
@@ -40,5 +44,9 @@ export function loadEnv(): Env {
     GUILD_ID: process.env.GUILD_ID,
     QUEUE_TTL_MINUTES: integerWithDefault("QUEUE_TTL_MINUTES", 30),
     LFG_CHANNEL_NAME: process.env.LFG_CHANNEL_NAME?.trim() || "lfg-sorcery",
+    EMOJI_AIR: process.env.EMOJI_AIR?.trim() || "🜁",
+    EMOJI_EARTH: process.env.EMOJI_EARTH?.trim() || "🜃",
+    EMOJI_FIRE: process.env.EMOJI_FIRE?.trim() || "🜂",
+    EMOJI_WATER: process.env.EMOJI_WATER?.trim() || "🜄",
   };
 }

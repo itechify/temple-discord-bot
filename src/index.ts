@@ -5,6 +5,7 @@ import {
   lfgCommandData,
   refreshTrackedLfgPanelForGuild,
 } from "./commands/lfg";
+import { buildCardEmbed, extractCardQueries, loadCardLookup } from "./cards/lookup";
 import { LfgQueue } from "./lfg/queue";
 import { loadEnv } from "./util/env";
 import { logger } from "./util/logger";
@@ -12,9 +13,16 @@ import { logger } from "./util/logger";
 async function main(): Promise<void> {
   const env = loadEnv();
   const queue = new LfgQueue(env.QUEUE_TTL_MINUTES * 60 * 1000);
+  const cardLookup = loadCardLookup();
+  const elementEmojis = {
+    air: env.EMOJI_AIR,
+    earth: env.EMOJI_EARTH,
+    fire: env.EMOJI_FIRE,
+    water: env.EMOJI_WATER,
+  };
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
   });
 
   client.once(Events.ClientReady, async (readyClient) => {
@@ -39,7 +47,9 @@ async function main(): Promise<void> {
         affectedGuildIds.add(entry.guildId);
         try {
           const user = await client.users.fetch(entry.userId);
-          await user.send(buildExpiryDmMessage(client, entry.guildId, env.LFG_CHANNEL_NAME, entry.format));
+          await user.send(
+            buildExpiryDmMessage(client, entry.guildId, env.LFG_CHANNEL_NAME, entry.format),
+          );
         } catch (error) {
           logger.warn("Unable to DM expired queue user.", {
             userId: entry.userId,
@@ -125,6 +135,38 @@ async function main(): Promise<void> {
     }
   });
 
+  client.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot || !message.inGuild()) {
+      return;
+    }
+
+    const queries = extractCardQueries(message.content);
+    if (queries.length === 0) {
+      return;
+    }
+
+    try {
+      const lookupResults = queries.map((query) => cardLookup.find(query));
+      const embeds = lookupResults.flatMap((result) =>
+        result.card ? [buildCardEmbed(result.card, elementEmojis)] : [],
+      );
+
+      for (let i = 0; i < embeds.length; i += 10) {
+        await message.channel.send({
+          embeds: embeds.slice(i, i + 10),
+          allowedMentions: { repliedUser: false, parse: [] },
+        });
+      }
+    } catch (error) {
+      logger.error("Error handling card lookup message.", {
+        content: message.content,
+        channelId: message.channelId,
+        guildId: message.guildId,
+        error,
+      });
+    }
+  });
+
   await client.login(env.DISCORD_TOKEN);
 }
 
@@ -153,9 +195,7 @@ function buildExpiryDmMessage(
     (item) => item.type === ChannelType.GuildText && item.name === lfgChannelName,
   );
 
-  const lines = [
-    `Your LFG entry for **${format}** expired.`,
-  ];
+  const lines = [`Your LFG entry for **${format}** expired.`];
 
   if (channel && channel.type === ChannelType.GuildText) {
     lines.push(`Go to <#${channel.id}> to rejoin.`);

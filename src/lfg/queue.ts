@@ -131,6 +131,7 @@ export class LfgQueue {
         format: item,
         count: queue.length,
         oldestWaitMs: oldest === null ? null : Math.max(0, now - oldest),
+        queuedUserIds: queue.map((entry) => entry.userId),
       };
     });
 
