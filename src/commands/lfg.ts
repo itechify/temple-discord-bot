@@ -18,6 +18,7 @@ import type { Logger } from "../util/logger";
 interface LfgCommandContext {
   queue: LfgQueue;
   lfgChannelName: string;
+  queueTtlMinutes: number;
   logger: Logger;
 }
 
@@ -202,7 +203,7 @@ export async function ensureLfgPanelForGuild(
     try {
       const message = await channel.messages.fetch(tracked.messageId);
       await deleteDuplicatePanelMessages(guild, channel, message.id, context.logger);
-      await message.edit(buildPanelMessage(context.queue, guild.id));
+      await message.edit(buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes));
       return;
     } catch {
       panelMessages.delete(guild.id);
@@ -223,7 +224,7 @@ export async function ensureLfgPanelForGuild(
         channelId: channel.id,
         messageId: existing.id,
       });
-      await existing.edit(buildPanelMessage(context.queue, guild.id));
+      await existing.edit(buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes));
       return;
     }
   } catch (error) {
@@ -233,7 +234,7 @@ export async function ensureLfgPanelForGuild(
     });
   }
 
-  const sent = await channel.send(buildPanelMessage(context.queue, guild.id));
+  const sent = await channel.send(buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes));
   panelMessages.set(guild.id, { channelId: channel.id, messageId: sent.id });
 }
 
@@ -336,6 +337,7 @@ async function handleJoin(
 function buildPanelMessage(
   queue: LfgQueue,
   guildId: string,
+  queueTtlMinutes: number,
 ): {
   embeds: EmbedBuilder[];
   components: ActionRowBuilder<ButtonBuilder>[];
@@ -361,7 +363,7 @@ function buildPanelMessage(
         `📦 Sealed:       ${s}/2`,
         `👥 Multiplayer:  ${m}/4`,
         "```",
-        "Pick a format to join. Auto-expires in **30 min**.",
+        `Pick a format to join. Auto-expires in **${queueTtlMinutes} min**.`,
       ].join("\n"),
     )
     .setTimestamp();
@@ -412,7 +414,7 @@ async function refreshPanelIfTracked(
 
   try {
     const message = await (channel as TextChannel).messages.fetch(tracked.messageId);
-    await message.edit(buildPanelMessage(context.queue, guild.id));
+    await message.edit(buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes));
   } catch (error) {
     context.logger.warn("Failed to refresh LFG panel message.", {
       guildId: guild.id,
@@ -434,7 +436,7 @@ async function bumpPanelToBottom(guild: Guild | null, context: LfgCommandContext
 
   await deleteDuplicatePanelMessages(guild, channel, null, context.logger);
 
-  const sent = await channel.send(buildPanelMessage(context.queue, guild.id));
+  const sent = await channel.send(buildPanelMessage(context.queue, guild.id, context.queueTtlMinutes));
   panelMessages.set(guild.id, { channelId: channel.id, messageId: sent.id });
 }
 

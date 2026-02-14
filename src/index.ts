@@ -59,6 +59,7 @@ async function main(): Promise<void> {
           await refreshTrackedLfgPanelForGuild(guild, {
             queue,
             lfgChannelName: env.LFG_CHANNEL_NAME,
+            queueTtlMinutes: env.QUEUE_TTL_MINUTES,
             logger,
           });
         } catch (error) {
@@ -81,6 +82,7 @@ async function main(): Promise<void> {
         await handleLfgButtonInteraction(interaction, {
           queue,
           lfgChannelName: env.LFG_CHANNEL_NAME,
+          queueTtlMinutes: env.QUEUE_TTL_MINUTES,
           logger,
         });
       } catch (error) {
@@ -108,6 +110,7 @@ async function main(): Promise<void> {
       await handleLfgCommand(interaction, {
         queue,
         lfgChannelName: env.LFG_CHANNEL_NAME,
+        queueTtlMinutes: env.QUEUE_TTL_MINUTES,
         logger,
       });
     } catch (error) {
