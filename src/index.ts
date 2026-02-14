@@ -1,5 +1,10 @@
-import { Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
-import { handleLfgButtonInteraction, handleLfgCommand, lfgCommandData } from "./commands/lfg";
+import { ChannelType, Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
+import {
+  handleLfgButtonInteraction,
+  handleLfgCommand,
+  lfgCommandData,
+  refreshTrackedLfgPanelForGuild,
+} from "./commands/lfg";
 import { LfgQueue } from "./lfg/queue";
 import { loadEnv } from "./util/env";
 import { logger } from "./util/logger";
@@ -28,14 +33,37 @@ async function main(): Promise<void> {
         return;
       }
 
+      const affectedGuildIds = new Set<string>();
+
       for (const entry of expiredEntries) {
+        affectedGuildIds.add(entry.guildId);
         try {
           const user = await client.users.fetch(entry.userId);
-          await user.send(`Your LFG entry expired—run /lfg join ${entry.format} to re-enter.`);
+          await user.send(buildExpiryDmMessage(client, entry.guildId, env.LFG_CHANNEL_NAME, entry.format));
         } catch (error) {
           logger.warn("Unable to DM expired queue user.", {
             userId: entry.userId,
             format: entry.format,
+            error,
+          });
+        }
+      }
+
+      for (const guildId of affectedGuildIds) {
+        const guild = client.guilds.cache.get(guildId);
+        if (!guild) {
+          continue;
+        }
+
+        try {
+          await refreshTrackedLfgPanelForGuild(guild, {
+            queue,
+            lfgChannelName: env.LFG_CHANNEL_NAME,
+            logger,
+          });
+        } catch (error) {
+          logger.warn("Failed to refresh LFG panel after queue expiry cleanup.", {
+            guildId,
             error,
           });
         }
@@ -109,6 +137,30 @@ async function registerCommands(token: string, clientId: string, guildId?: strin
 
   await rest.put(Routes.applicationCommands(clientId), { body: payload });
   logger.warn("GUILD_ID not set. Registered global commands (can take up to 1 hour).", {});
+}
+
+function buildExpiryDmMessage(
+  client: Client,
+  guildId: string,
+  lfgChannelName: string,
+  format: string,
+): string {
+  const guild = client.guilds.cache.get(guildId);
+  const channel = guild?.channels.cache.find(
+    (item) => item.type === ChannelType.GuildText && item.name === lfgChannelName,
+  );
+
+  const lines = [
+    `Your LFG entry for **${format}** expired.`,
+  ];
+
+  if (channel && channel.type === ChannelType.GuildText) {
+    lines.push(`Go to <#${channel.id}> to rejoin.`);
+  } else {
+    lines.push(`Go to #${lfgChannelName} in the server to rejoin.`);
+  }
+
+  return lines.join("\n");
 }
 
 main().catch((error) => {

@@ -1,6 +1,11 @@
-export const FORMATS = ["constructed", "sealed"] as const;
+export const FORMATS = ["constructed", "sealed", "multiplayer"] as const;
 
 export type LfgFormat = (typeof FORMATS)[number];
+export const PLAYERS_PER_MATCH: Record<LfgFormat, number> = {
+  constructed: 2,
+  sealed: 2,
+  multiplayer: 4,
+};
 
 export interface QueueEntry {
   guildId: string;
@@ -29,7 +34,7 @@ export type JoinResult =
   | {
       kind: "matched";
       format: LfgFormat;
-      opponentUserId: string;
+      matchedUserIds: string[];
       movedFrom?: LfgFormat;
     };
 

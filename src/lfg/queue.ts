@@ -4,6 +4,7 @@ import {
   type JoinResult,
   type LeaveResult,
   type LfgFormat,
+  PLAYERS_PER_MATCH,
   type QueueEntry,
   type StatusResult,
 } from "./types";
@@ -64,16 +65,16 @@ export class LfgQueue {
     }
 
     const targetQueue = this.getOrCreateQueue(guildId, format);
-    const opponent = targetQueue.shift();
-
-    if (opponent) {
+    const requiredPlayers = PLAYERS_PER_MATCH[format];
+    if (targetQueue.length + 1 >= requiredPlayers) {
+      const matchedEntries = targetQueue.splice(0, requiredPlayers - 1);
       if (targetQueue.length === 0) {
         this.queues.delete(this.queueKey(guildId, format));
       }
       return {
         kind: "matched",
         format,
-        opponentUserId: opponent.userId,
+        matchedUserIds: matchedEntries.map((entry) => entry.userId),
         movedFrom,
       };
     }

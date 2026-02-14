@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 
-dotenv.config();
+const envFile = process.env.ENV_FILE?.trim();
+dotenv.config(envFile ? { path: envFile } : undefined);
 
 export interface Env {
   DISCORD_TOKEN: string;

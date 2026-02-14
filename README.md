@@ -4,12 +4,12 @@ Simple Discord bot for a Sorcery TCG server that provides `/lfg` queueing by for
 
 ## Features
 
-- `/lfg join format:<constructed|sealed>`
+- `/lfg join format:<constructed|sealed|multiplayer>`
 - `/lfg leave`
-- `/lfg status [format]`
+- `/lfg status`
 - `/lfg help`
 - Queue timeout with auto-cleanup (`QUEUE_TTL_MINUTES`, default `30`)
-- Instant matching when a second user joins the same format
+- Instant matching when enough players join the same format
 - Best-effort DM notifications for matches and queue expiry
 - Public bot announcements are posted in `#lfg-sorcery` (configurable)
 
@@ -51,6 +51,12 @@ Development:
 npm run dev
 ```
 
+Development (test bot / test server using `.env.dev`):
+
+```bash
+npm run dev:test
+```
+
 Build:
 
 ```bash
@@ -61,6 +67,12 @@ Run built code:
 
 ```bash
 npm start
+```
+
+Run built code (test bot / test server using `.env.dev`):
+
+```bash
+npm run start:test
 ```
 
 ## Required Discord Bot Permissions / Scopes
@@ -85,37 +97,35 @@ DMs can fail if users disable DMs from server members; bot handles this graceful
 - `/lfg` commands can be run in any channel within a guild.
 - Public queue/match announcements are posted in `#lfg-sorcery` (or configured channel name).
 
-### `/lfg join format:<constructed|sealed>`
+### `/lfg join format:<constructed|sealed|multiplayer>`
 
 - Adds user to that format queue.
 - If already queued in same format: ephemeral response with remaining time.
 - If queued in another format: moves user and confirms ephemerally.
-- If someone else is waiting in that same format:
-  - immediately matches both,
-  - removes both from queue,
+- When enough players are waiting for that format (2 for Constructed/Sealed, 4 for Multiplayer):
+  - immediately creates a match group,
+  - removes all matched players from queue,
   - posts public message in `#lfg-sorcery`:
-    - `Match found: @User1 vs @User2 (Format: Constructed)`
-  - sends both users best-effort DM.
+    - `Match found: @User1, @User2, ... (Format: Multiplayer)`
+  - sends all matched users best-effort DM.
 
 ### `/lfg leave`
 
 - Removes user from whichever format queue they are in.
 - If not queued, returns ephemeral notice.
 
-### `/lfg status [format]`
+### `/lfg status`
 
-- Shows counts per format (or one format if provided).
-- Shows oldest waiting duration per format.
-- Shows caller's current queued format and remaining time if queued.
-- Does not list usernames.
+- Shows only the caller's current queued format and remaining time if queued.
+- If not queued, returns an ephemeral notice.
 
 ### `/lfg help`
 
 Ephemeral usage summary:
 
-- `/lfg join constructed|sealed`
+- `/lfg join constructed|sealed|multiplayer`
 - `/lfg leave`
-- `/lfg status [format]`
+- `/lfg status`
 
 ## Project Structure
 

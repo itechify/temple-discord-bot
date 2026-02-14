@@ -23,6 +23,7 @@ interface LfgCommandContext {
 
 const PANEL_JOIN_CONSTRUCTED = "lfg_panel_join_constructed";
 const PANEL_JOIN_SEALED = "lfg_panel_join_sealed";
+const PANEL_JOIN_MULTIPLAYER = "lfg_panel_join_multiplayer";
 const PANEL_LEAVE = "lfg_panel_leave";
 
 const panelMessages = new Map<string, { channelId: string; messageId: string }>();
@@ -42,24 +43,13 @@ export const lfgCommandData = new SlashCommandBuilder()
           .addChoices(
             { name: "constructed", value: "constructed" },
             { name: "sealed", value: "sealed" },
+            { name: "multiplayer", value: "multiplayer" },
           ),
       ),
   )
   .addSubcommand((subcommand) => subcommand.setName("leave").setDescription("Leave the LFG queue"))
   .addSubcommand((subcommand) =>
-    subcommand
-      .setName("status")
-      .setDescription("View queue status")
-      .addStringOption((option) =>
-        option
-          .setName("format")
-          .setDescription("Optional format filter")
-          .setRequired(false)
-          .addChoices(
-            { name: "constructed", value: "constructed" },
-            { name: "sealed", value: "sealed" },
-          ),
-      ),
+    subcommand.setName("status").setDescription("View your queue status"),
   )
   .addSubcommand((subcommand) =>
     subcommand.setName("help").setDescription("Show LFG command help"),
@@ -122,38 +112,33 @@ export async function handleLfgCommand(
   }
 
   if (subcommand === "status") {
-    const format = interaction.options.getString("format") as LfgFormat | null;
-    const status = context.queue.status(guildId, interaction.user.id, format ?? undefined);
+    const status = context.queue.status(guildId, interaction.user.id);
 
-    const lines = ["**LFG Queue Status**"];
-    for (const item of status.formats) {
-      const oldest = item.oldestWaitMs === null ? "n/a" : humanizeDuration(item.oldestWaitMs);
-      lines.push(
-        `- **${formatLabel(item.format)}**: **${item.count}** waiting | Oldest wait: \`${oldest}\``,
-      );
-    }
-
+    const lines = [];
     if (status.userStatus) {
-      lines.push("");
-      lines.push(`**Your queue:** ${formatDisplay(status.userStatus.format)}`);
-      lines.push(`**Expires in:** \`${humanizeDuration(status.userStatus.remainingMs)}\``);
+      lines.push(`You are currently queued for **${formatDisplay(status.userStatus.format)}**.`);
+      lines.push(`It will expire in \`${humanizeDuration(status.userStatus.remainingMs)}\``);
     } else {
-      lines.push("");
-      lines.push("**Your queue:** Not currently queued.");
+      lines.push("Not currently queued.");
     }
 
     await interaction.reply({ content: lines.join("\n"), ephemeral: true });
     return;
   }
 
+  const announcementChannel = getAnnouncementChannel(interaction.guild, context.lfgChannelName);
+  const channelReference = announcementChannel
+    ? `<#${announcementChannel.id}>`
+    : `#${context.lfgChannelName}`;
+
   await interaction.reply({
     content: [
-      `Bot announcements are posted in #${context.lfgChannelName}.`,
+      `Bot announcements are posted in ${channelReference}.`,
       "",
       "**Commands**",
-      "- `/lfg join constructed|sealed`",
+      "- `/lfg join constructed|sealed|multiplayer`",
       "- `/lfg leave`",
-      "- `/lfg status [format]`",
+      "- `/lfg status`",
     ].join("\n"),
     ephemeral: true,
   });
@@ -252,6 +237,13 @@ export async function ensureLfgPanelForGuild(
   panelMessages.set(guild.id, { channelId: channel.id, messageId: sent.id });
 }
 
+export async function refreshTrackedLfgPanelForGuild(
+  guild: Guild,
+  context: LfgCommandContext,
+): Promise<void> {
+  await refreshPanelIfTracked(guild, context);
+}
+
 async function handleJoin(
   interaction: ChatInputCommandInteraction | ButtonInteraction,
   context: LfgCommandContext,
@@ -288,7 +280,7 @@ async function handleJoin(
         await announcementChannel.send(
           `${userMention(interaction.user.id)} has joined the queue looking for a **${formatLabel(
             result.format,
-          )}** game!\nJoin with: \`/lfg join format:${result.format}\``,
+          )}** game!\nJoin with \`/lfg join format:${result.format}\` or by clicking the button below!`,
         );
         await bumpPanelToBottom(interaction.guild, context);
       } catch (error) {
@@ -302,9 +294,8 @@ async function handleJoin(
     return;
   }
 
-  const message = `**Match found:** ${userMention(interaction.user.id)} vs ${userMention(
-    result.opponentUserId,
-  )}\n**Format:** ${formatDisplay(result.format)}`;
+  const participantIds = [interaction.user.id, ...result.matchedUserIds];
+  const message = `**Match found:** ${participantIds.map((id) => userMention(id)).join(", ")}\n**Format:** ${formatDisplay(result.format)}`;
 
   if (announcementChannel) {
     try {
@@ -313,7 +304,7 @@ async function handleJoin(
     } catch (error) {
       context.logger.warn("Failed to post match announcement.", {
         userId: interaction.user.id,
-        opponentUserId: result.opponentUserId,
+        participantUserIds: participantIds,
         format: result.format,
         error,
       });
@@ -326,20 +317,20 @@ async function handleJoin(
     ? `<#${announcementChannel.id}>`
     : `#${context.lfgChannelName}`;
 
-  const dmToJoiner = [
-    `Sorcery match found in ${channelReference}!`,
-    `Opponent: <@${result.opponentUserId}>`,
-    `Format: ${formatLabel(result.format)}`,
-  ].join("\n");
-  const dmToOpponent = [
-    `Sorcery match found in ${channelReference}!`,
-    `Opponent: <@${interaction.user.id}>`,
-    `Format: ${formatLabel(result.format)}`,
-  ].join("\n");
-  await Promise.all([
-    safeDm(interaction, interaction.user.id, dmToJoiner, context.logger),
-    safeDm(interaction, result.opponentUserId, dmToOpponent, context.logger),
-  ]);
+  await Promise.all(
+    participantIds.map((userId) => {
+      const otherPlayers = participantIds
+        .filter((id) => id !== userId)
+        .map((id) => userMention(id))
+        .join(", ");
+      const dm = [
+        `Sorcery match found in ${channelReference}!`,
+        `Other player(s): ${otherPlayers}`,
+        `Format: ${formatLabel(result.format)}`,
+      ].join("\n");
+      return safeDm(interaction, userId, dm, context.logger);
+    }),
+  );
 }
 
 function buildPanelMessage(
@@ -352,22 +343,27 @@ function buildPanelMessage(
   const status = queue.status(guildId, "panel-user");
   const totalWaiting = status.formats.reduce((acc, item) => acc + item.count, 0);
 
+  const c = status.formats.find((f) => f.format === "constructed")?.count ?? 0;
+  const s = status.formats.find((f) => f.format === "sealed")?.count ?? 0;
+  const m = status.formats.find((f) => f.format === "multiplayer")?.count ?? 0;
+
   const embed = new EmbedBuilder()
-    .setTitle("LFG Queue Status")
+    .setTitle("🧙‍♂️ LFG Queue")
     .setColor(totalWaiting > 0 ? 0x57f287 : 0xed4245)
     .setDescription(
       [
         totalWaiting > 0
-          ? `**${totalWaiting} player(s)** looking for a game.`
-          : "**Queue is empty**",
+          ? `**${totalWaiting} sorcerer(s)** looking to test their skills!`
+          : "No one in queue! ✅",
         "",
-        `- **Constructed:** ${status.formats.find((f) => f.format === "constructed")?.count ?? 0}`,
-        `- **Sealed:** ${status.formats.find((f) => f.format === "sealed")?.count ?? 0}`,
-        "",
-        "Click a button below to join.",
+        "```",
+        `🛠️ Constructed:  ${c}/2`,
+        `📦 Sealed:       ${s}/2`,
+        `👥 Multiplayer:  ${m}/4`,
+        "```",
+        "Pick a format to join. Auto-expires in **30 min**.",
       ].join("\n"),
     )
-    .setFooter({ text: "Updates when commands/buttons are used" })
     .setTimestamp();
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -378,7 +374,11 @@ function buildPanelMessage(
     new ButtonBuilder()
       .setCustomId(PANEL_JOIN_SEALED)
       .setLabel("Join Sealed")
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(PANEL_JOIN_MULTIPLAYER)
+      .setLabel("Join Multiplayer")
+      .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(PANEL_LEAVE)
       .setLabel("Leave Queue")
@@ -484,6 +484,10 @@ function buttonFormat(customId: string): LfgFormat | null {
     return "sealed";
   }
 
+  if (customId === PANEL_JOIN_MULTIPLAYER) {
+    return "multiplayer";
+  }
+
   return null;
 }
 
@@ -529,6 +533,7 @@ function formatLabel(format: LfgFormat): string {
   const map: Record<LfgFormat, string> = {
     constructed: "Constructed",
     sealed: "Sealed",
+    multiplayer: "Multiplayer",
   };
 
   return map[format];
