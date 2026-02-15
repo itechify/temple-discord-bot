@@ -9,6 +9,7 @@ Simple Discord bot for a Sorcery TCG server that provides `/lfg` queueing by for
 - `/lfg status`
 - `/lfg help`
 - `[[card name]]` lookup in any guild channel (supports multiple per message)
+- `[[?card name]]` rulings/FAQ lookup in any guild channel
 - Queue timeout with auto-cleanup (`QUEUE_TTL_MINUTES`, default `30`)
 - Instant matching when enough players join the same format
 - Best-effort DM notifications for matches and queue expiry
@@ -142,12 +143,21 @@ Ephemeral usage summary:
 - Matching is case-insensitive and supports light misspellings.
 - Bot replies in the same channel with card details from `cards.json`.
 
+### Card FAQ by message
+
+- Ask for FAQ with `[[?card name]]`.
+- Example: `[[?Past in Flames]]`
+- Multiple FAQ lookups in one message are supported.
+- Matching is case-insensitive and supports light misspellings.
+- Bot replies in the same channel with FAQ/rulings from `faq.csv`.
+
 ## Project Structure
 
 ```text
 src/
   index.ts
   cards/
+    faq.ts
     lookup.ts
   commands/
     lfg.ts

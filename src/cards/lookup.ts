@@ -1,6 +1,6 @@
-import { EmbedBuilder } from "discord.js";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { EmbedBuilder } from "discord.js";
 
 interface CardThresholds {
   air?: number;
@@ -123,6 +123,9 @@ export function extractCardQueries(messageContent: string): string[] {
     if (!query) {
       continue;
     }
+    if (query.startsWith("?")) {
+      continue;
+    }
 
     const key = query.toLowerCase();
     if (seen.has(key)) {
@@ -167,9 +170,7 @@ export function buildCardEmbed(card: CardRecord, elementEmojis: ElementEmojis): 
     lines.push(replaceThresholdSymbols(guardian.rulesText, elementEmojis));
   }
 
-  return new EmbedBuilder()
-    .setColor(rarityColor(guardian.rarity))
-    .setDescription(lines.join("\n"));
+  return new EmbedBuilder().setColor(rarityColor(guardian.rarity)).setDescription(lines.join("\n"));
 }
 
 function normalizeCardName(value: string): string {
@@ -208,18 +209,7 @@ function extractTypeText(card: CardRecord): string {
 }
 
 function boldCapitalizedWords(value: string): string {
-  const skipWords = new Set([
-    "a",
-    "an",
-    "the",
-    "your",
-    "my",
-    "our",
-    "their",
-    "his",
-    "her",
-    "its",
-  ]);
+  const skipWords = new Set(["a", "an", "the", "your", "my", "our", "their", "his", "her", "its"]);
 
   return value.replace(/\b[A-Z][A-Za-z']*\b/g, (word) => {
     if (skipWords.has(word.toLowerCase())) {

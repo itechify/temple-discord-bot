@@ -1,11 +1,12 @@
 import { ChannelType, Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
+import { buildFaqEmbeds, extractFaqQueries, loadCardFaqLookup } from "./cards/faq";
+import { buildCardEmbed, extractCardQueries, loadCardLookup } from "./cards/lookup";
 import {
   handleLfgButtonInteraction,
   handleLfgCommand,
   lfgCommandData,
   refreshTrackedLfgPanelForGuild,
 } from "./commands/lfg";
-import { buildCardEmbed, extractCardQueries, loadCardLookup } from "./cards/lookup";
 import { LfgQueue } from "./lfg/queue";
 import { loadEnv } from "./util/env";
 import { logger } from "./util/logger";
@@ -14,6 +15,7 @@ async function main(): Promise<void> {
   const env = loadEnv();
   const queue = new LfgQueue(env.QUEUE_TTL_MINUTES * 60 * 1000);
   const cardLookup = loadCardLookup();
+  const cardFaqLookup = loadCardFaqLookup();
   const elementEmojis = {
     air: env.EMOJI_AIR,
     earth: env.EMOJI_EARTH,
@@ -22,7 +24,11 @@ async function main(): Promise<void> {
   };
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
   });
 
   client.once(Events.ClientReady, async (readyClient) => {
@@ -140,12 +146,24 @@ async function main(): Promise<void> {
       return;
     }
 
+    const faqQueries = extractFaqQueries(message.content);
     const queries = extractCardQueries(message.content);
-    if (queries.length === 0) {
+    if (queries.length === 0 && faqQueries.length === 0) {
       return;
     }
 
     try {
+      const faqEmbeds = faqQueries.flatMap((query) => {
+        const result = cardFaqLookup.find(query);
+        return result ? buildFaqEmbeds(result, elementEmojis) : [];
+      });
+      for (const embed of faqEmbeds) {
+        await message.channel.send({
+          embeds: [embed],
+          allowedMentions: { repliedUser: false, parse: [] },
+        });
+      }
+
       const lookupResults = queries.map((query) => cardLookup.find(query));
       const embeds = lookupResults.flatMap((result) =>
         result.card ? [buildCardEmbed(result.card, elementEmojis)] : [],
