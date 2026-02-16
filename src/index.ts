@@ -155,7 +155,7 @@ async function main(): Promise<void> {
     try {
       const faqEmbeds = faqQueries.flatMap((query) => {
         const result = cardFaqLookup.find(query);
-        return result ? buildFaqEmbeds(result, elementEmojis) : [];
+        return result ? buildFaqEmbeds(result, elementEmojis, cardLookup) : [];
       });
       for (const embed of faqEmbeds) {
         await message.channel.send({

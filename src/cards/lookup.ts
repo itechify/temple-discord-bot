@@ -106,6 +106,22 @@ export class CardLookup {
   }
 }
 
+export function replaceCardReferencesWithLinks(text: string, cardLookup: CardLookup): string {
+  return text.replace(/\[\[([^[\]]+)\]\]/g, (rawMatch, rawQuery: string) => {
+    const query = rawQuery.trim();
+    if (!query || query.startsWith("?") || query.startsWith("!")) {
+      return rawMatch;
+    }
+
+    const result = cardLookup.find(query);
+    if (!result.card) {
+      return rawMatch;
+    }
+
+    return `[${escapeLinkText(result.card.name)}](${buildCuriosaUrl(result.card)})`;
+  });
+}
+
 export function loadCardLookup(): CardLookup {
   const cardsPath = path.resolve(__dirname, "..", "..", "cards.json");
   const raw = readFileSync(cardsPath, "utf8");
@@ -123,7 +139,7 @@ export function extractCardQueries(messageContent: string): string[] {
     if (!query) {
       continue;
     }
-    if (query.startsWith("?")) {
+    if (query.startsWith("?") || query.startsWith("!")) {
       continue;
     }
 
@@ -145,8 +161,7 @@ export function buildCardEmbed(card: CardRecord, elementEmojis: ElementEmojis): 
   const combatStats = formatCombatStats(guardian);
   const lifeStat = formatLifeStat(guardian);
   const titleResources = formatTitleResources(guardian, elementEmojis);
-  const slug = extractCuriosaSlugFromCard(card);
-  const cardUrl = `https://curiosa.io/cards/${slug}`;
+  const cardUrl = buildCuriosaUrl(card);
   const headerLine = titleResources
     ? `**[${escapeLinkText(card.name)}](${cardUrl})** ${titleResources}`
     : `**[${escapeLinkText(card.name)}](${cardUrl})**`;
@@ -171,6 +186,11 @@ export function buildCardEmbed(card: CardRecord, elementEmojis: ElementEmojis): 
   }
 
   return new EmbedBuilder().setColor(rarityColor(guardian.rarity)).setDescription(lines.join("\n"));
+}
+
+export function buildCuriosaUrl(card: CardRecord): string {
+  const slug = extractCuriosaSlugFromCard(card);
+  return `https://curiosa.io/cards/${slug}`;
 }
 
 function normalizeCardName(value: string): string {

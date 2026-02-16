@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Colors, EmbedBuilder } from "discord.js";
-import type { ElementEmojis } from "./lookup";
+import {
+  type CardLookup,
+  type ElementEmojis,
+  replaceCardReferencesWithLinks,
+} from "./lookup";
 
 interface FaqRow {
   cardName: string;
@@ -100,7 +104,11 @@ export function extractFaqQueries(messageContent: string): string[] {
   return matches;
 }
 
-export function buildFaqEmbeds(faq: FaqLookupResult, elementEmojis: ElementEmojis): EmbedBuilder[] {
+export function buildFaqEmbeds(
+  faq: FaqLookupResult,
+  elementEmojis: ElementEmojis,
+  cardLookup: CardLookup,
+): EmbedBuilder[] {
   const maxDescriptionLength = 3900;
   const embeds: EmbedBuilder[] = [];
   let current = "";
@@ -124,8 +132,14 @@ export function buildFaqEmbeds(faq: FaqLookupResult, elementEmojis: ElementEmoji
   };
 
   for (const entry of faq.entries) {
-    const question = replaceThresholdSymbols(entry.question, elementEmojis);
-    const answer = replaceThresholdSymbols(entry.answer, elementEmojis);
+    const question = replaceCardReferencesWithLinks(
+      replaceThresholdSymbols(entry.question, elementEmojis),
+      cardLookup,
+    );
+    const answer = replaceCardReferencesWithLinks(
+      replaceThresholdSymbols(entry.answer, elementEmojis),
+      cardLookup,
+    );
     const block = `_${question}_\n${indentAnswer(answer)}\n\n`;
     const safeBlock =
       block.length > maxDescriptionLength
