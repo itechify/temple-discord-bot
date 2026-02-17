@@ -9,6 +9,7 @@ export interface Env {
   GUILD_ID?: string;
   QUEUE_TTL_MINUTES: number;
   LFG_CHANNEL_NAME: string;
+  LFG_LEADERBOARD_PATH: string;
   EMOJI_AIR: string;
   EMOJI_EARTH: string;
   EMOJI_FIRE: string;
@@ -44,6 +45,8 @@ export function loadEnv(): Env {
     GUILD_ID: process.env.GUILD_ID,
     QUEUE_TTL_MINUTES: integerWithDefault("QUEUE_TTL_MINUTES", 30),
     LFG_CHANNEL_NAME: process.env.LFG_CHANNEL_NAME?.trim() || "lfg-sorcery",
+    LFG_LEADERBOARD_PATH:
+      process.env.LFG_LEADERBOARD_PATH?.trim() || "./data/lfg-leaderboard.json",
     EMOJI_AIR: process.env.EMOJI_AIR?.trim() || "🜁",
     EMOJI_EARTH: process.env.EMOJI_EARTH?.trim() || "🜃",
     EMOJI_FIRE: process.env.EMOJI_FIRE?.trim() || "🜂",

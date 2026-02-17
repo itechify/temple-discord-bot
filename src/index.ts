@@ -7,6 +7,7 @@ import {
   lfgCommandData,
   refreshTrackedLfgPanelForGuild,
 } from "./commands/lfg";
+import { LfgLeaderboardStore } from "./lfg/leaderboard";
 import { LfgQueue } from "./lfg/queue";
 import { loadEnv } from "./util/env";
 import { logger } from "./util/logger";
@@ -14,6 +15,7 @@ import { logger } from "./util/logger";
 async function main(): Promise<void> {
   const env = loadEnv();
   const queue = new LfgQueue(env.QUEUE_TTL_MINUTES * 60 * 1000);
+  const leaderboardStore = new LfgLeaderboardStore(env.LFG_LEADERBOARD_PATH);
   const cardLookup = loadCardLookup();
   const cardFaqLookup = loadCardFaqLookup();
   const elementEmojis = {
@@ -74,6 +76,7 @@ async function main(): Promise<void> {
         try {
           await refreshTrackedLfgPanelForGuild(guild, {
             queue,
+            leaderboardStore,
             lfgChannelName: env.LFG_CHANNEL_NAME,
             queueTtlMinutes: env.QUEUE_TTL_MINUTES,
             logger,
@@ -97,6 +100,7 @@ async function main(): Promise<void> {
       try {
         await handleLfgButtonInteraction(interaction, {
           queue,
+          leaderboardStore,
           lfgChannelName: env.LFG_CHANNEL_NAME,
           queueTtlMinutes: env.QUEUE_TTL_MINUTES,
           logger,
@@ -125,6 +129,7 @@ async function main(): Promise<void> {
     try {
       await handleLfgCommand(interaction, {
         queue,
+        leaderboardStore,
         lfgChannelName: env.LFG_CHANNEL_NAME,
         queueTtlMinutes: env.QUEUE_TTL_MINUTES,
         logger,

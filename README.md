@@ -7,11 +7,13 @@ Simple Discord bot for a Sorcery TCG server that provides `/lfg` queueing by for
 - `/lfg join format:<constructed|sealed|multiplayer>`
 - `/lfg leave`
 - `/lfg status`
+- `/lfg leaderboard [format] [limit]`
 - `/lfg help`
 - `[[card name]]` lookup in any guild channel (supports multiple per message)
 - `[[?card name]]` rulings/FAQ lookup in any guild channel
 - Queue timeout with auto-cleanup (`QUEUE_TTL_MINUTES`, default `30`)
 - Instant matching when enough players join the same format
+- Persistent local leaderboard count of matches found per player
 - Best-effort DM notifications for matches and queue expiry
 - Public bot announcements are posted in `#lfg-sorcery` (configurable)
 
@@ -44,6 +46,7 @@ cp .env.example .env
 - `GUILD_ID`: Dev guild ID (recommended for fast slash command registration)
 - `QUEUE_TTL_MINUTES`: Queue TTL in minutes (default `30`)
 - `LFG_CHANNEL_NAME`: Must match channel name (default `lfg-sorcery`)
+- `LFG_LEADERBOARD_PATH`: File path for persisted leaderboard data (default `./data/lfg-leaderboard.json`)
 - `EMOJI_AIR`: Card threshold emoji for air (default `🜁`)
 - `EMOJI_EARTH`: Card threshold emoji for earth (default `🜃`)
 - `EMOJI_FIRE`: Card threshold emoji for fire (default `🜂`)
@@ -127,6 +130,13 @@ DMs can fail if users disable DMs from server members; bot handles this graceful
 - Shows only the caller's current queued format and remaining time if queued.
 - If not queued, returns an ephemeral notice.
 
+### `/lfg leaderboard [format] [limit]`
+
+- Shows players with the highest match-found counts.
+- Optional `format` filters by constructed/sealed/multiplayer.
+- Optional `limit` controls number of rows (default `10`, max `25`).
+- Counts are persisted to the leaderboard file path in env.
+
 ### `/lfg help`
 
 Ephemeral usage summary:
@@ -134,6 +144,7 @@ Ephemeral usage summary:
 - `/lfg join constructed|sealed|multiplayer`
 - `/lfg leave`
 - `/lfg status`
+- `/lfg leaderboard [format] [limit]`
 
 ### Card lookup by message
 
@@ -162,6 +173,7 @@ src/
   commands/
     lfg.ts
   lfg/
+    leaderboard.ts
     queue.ts
     types.ts
   util/

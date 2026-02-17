@@ -12,11 +12,13 @@ import {
   userMention,
 } from "discord.js";
 import type { LfgQueue } from "../lfg/queue";
+import type { LfgLeaderboardStore } from "../lfg/leaderboard";
 import { FORMATS, type LfgFormat } from "../lfg/types";
 import type { Logger } from "../util/logger";
 
 interface LfgCommandContext {
   queue: LfgQueue;
+  leaderboardStore: LfgLeaderboardStore;
   lfgChannelName: string;
   queueTtlMinutes: number;
   logger: Logger;
@@ -51,6 +53,30 @@ export const lfgCommandData = new SlashCommandBuilder()
   .addSubcommand((subcommand) => subcommand.setName("leave").setDescription("Leave the LFG queue"))
   .addSubcommand((subcommand) =>
     subcommand.setName("status").setDescription("View your queue status"),
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName("leaderboard")
+      .setDescription("Show players with the most matches found")
+      .addStringOption((option) =>
+        option
+          .setName("format")
+          .setDescription("Optional format filter")
+          .setRequired(false)
+          .addChoices(
+            { name: "constructed", value: "constructed" },
+            { name: "sealed", value: "sealed" },
+            { name: "multiplayer", value: "multiplayer" },
+          ),
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName("limit")
+          .setDescription("How many players to show")
+          .setRequired(false)
+          .setMinValue(1)
+          .setMaxValue(20),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand.setName("help").setDescription("Show LFG command help"),
@@ -127,6 +153,34 @@ export async function handleLfgCommand(
     return;
   }
 
+  if (subcommand === "leaderboard") {
+    const format = interaction.options.getString("format") as LfgFormat | null;
+    const limit = interaction.options.getInteger("limit") ?? 10;
+    const rows = context.leaderboardStore.getLeaderboard(guildId, format ?? undefined, limit);
+
+    if (rows.length === 0) {
+      await interaction.reply({
+        content: `No matches have been recorded yet${format ? ` for ${formatDisplay(format)}` : ""}.`,
+      });
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📊 Match Count Rankings${format ? ` (${formatDisplay(format)})` : ""}`)
+      .setColor(0x5865f2)
+      .setDescription(
+        rows
+          .map((row, index) => leaderboardLine(index, row.userId, row.matchCount))
+          .join("\n"),
+      );
+
+    await interaction.reply({
+      embeds: [embed],
+      allowedMentions: { parse: [] },
+    });
+    return;
+  }
+
   const announcementChannel = getAnnouncementChannel(interaction.guild, context.lfgChannelName);
   const channelReference = announcementChannel
     ? `<#${announcementChannel.id}>`
@@ -140,6 +194,7 @@ export async function handleLfgCommand(
       "- `/lfg join constructed|sealed|multiplayer`",
       "- `/lfg leave`",
       "- `/lfg status`",
+      "- `/lfg leaderboard [format] [limit]`",
     ].join("\n"),
     ephemeral: true,
   });
@@ -298,6 +353,16 @@ async function handleJoin(
   }
 
   const participantIds = [interaction.user.id, ...result.matchedUserIds];
+  try {
+    context.leaderboardStore.recordMatch(guildId, participantIds, result.format);
+  } catch (error) {
+    context.logger.warn("Failed to record leaderboard match event.", {
+      guildId,
+      participantIds,
+      format: result.format,
+      error,
+    });
+  }
   const message = `**Match found:** ${participantIds.map((id) => userMention(id)).join(", ")}\n**Format:** ${formatDisplay(result.format)}`;
 
   if (announcementChannel) {
@@ -584,6 +649,19 @@ function buildWaitingLinesByFormat(groups: Array<{ emoji: string; userIds: strin
   }
 
   return lines;
+}
+
+function leaderboardLine(index: number, userId: string, matchCount: number): string {
+  if (index === 0) {
+    return `🥇 <@${userId}> — **${matchCount}** games`;
+  }
+  if (index === 1) {
+    return `🥈 <@${userId}> — **${matchCount}** games`;
+  }
+  if (index === 2) {
+    return `🥉 <@${userId}> — **${matchCount}** games`;
+  }
+  return `${index + 1}. <@${userId}> — **${matchCount}** games`;
 }
 
 export { FORMATS };
