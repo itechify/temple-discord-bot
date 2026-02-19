@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { Colors, EmbedBuilder } from "discord.js";
 import type { CardLookup } from "./lookup";
 import type { Logger } from "../util/logger";
 
@@ -18,6 +18,9 @@ interface TcgCsvProduct {
   name: string;
   cleanName?: string | null;
   url?: string | null;
+  imageUrl?: string | null;
+  imageURL?: string | null;
+  image?: string | null;
 }
 
 interface TcgCsvPrice {
@@ -44,11 +47,13 @@ interface PriceLine {
 
 interface PriceIndexEntry {
   displayName: string;
+  imageUrl?: string;
   prints: PricePrint[];
 }
 
 export interface PriceLookupResult {
   cardName: string;
+  imageUrl?: string;
   prints: PricePrint[];
 }
 
@@ -89,6 +94,7 @@ export class TcgCsvPriceLookup {
     if (merged) {
       return {
         cardName: merged.displayName,
+        imageUrl: merged.imageUrl,
         prints: merged.prints.slice(0, this.maxPrints),
       };
     }
@@ -103,6 +109,7 @@ export class TcgCsvPriceLookup {
 
     return {
       cardName: direct.displayName,
+      imageUrl: direct.imageUrl,
       prints: direct.prints.slice(0, this.maxPrints),
     };
   }
@@ -156,6 +163,7 @@ export class TcgCsvPriceLookup {
 
     return {
       displayName: matches[0].displayName,
+      imageUrl: matches.map((entry) => entry.imageUrl).find((value): value is string => Boolean(value)),
       prints,
     };
   }
@@ -271,6 +279,7 @@ export class TcgCsvPriceLookup {
           if (!existing) {
             nextByName.set(key, {
               displayName: stripFoilDecorators(product.name),
+              imageUrl: extractProductImageUrl(product) ?? undefined,
               prints: [print],
             });
             continue;
@@ -284,6 +293,7 @@ export class TcgCsvPriceLookup {
 
           sameSet.normal = sameSet.normal ?? print.normal;
           sameSet.foil = sameSet.foil ?? print.foil;
+          existing.imageUrl = existing.imageUrl ?? extractProductImageUrl(product) ?? undefined;
         }
       } catch (error) {
         this.logger.warn("Skipping TCGCSV group due to lookup failure.", {
@@ -360,7 +370,10 @@ export function extractPriceQueries(messageContent: string): string[] {
 export function buildPriceEmbed(result: PriceLookupResult): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setTitle(`Prices for ${result.cardName}`)
-    .setColor(0x57f287);
+    .setColor(Colors.DarkGreen);
+  if (result.imageUrl) {
+    embed.setThumbnail(result.imageUrl);
+  }
 
   for (const print of result.prints) {
     const lines: string[] = [];
@@ -459,6 +472,11 @@ function stripFoilDecorators(value: string): string {
     .trim();
 }
 
+function extractProductImageUrl(product: TcgCsvProduct): string | null {
+  const value = (product.imageUrl || product.imageURL || product.image || "").trim();
+  return value.length > 0 ? value : null;
+}
+
 function setEmoji(setName: string): string {
   const key = setName.toLowerCase();
   if (key.includes("alpha")) {
@@ -471,7 +489,7 @@ function setEmoji(setName: string): string {
     return "🛡️";
   }
   if (key.includes("gothic")) {
-    return "🕯️";
+    return "👻";
   }
   if (key.includes("dragonlord")) {
     return "🐉";
