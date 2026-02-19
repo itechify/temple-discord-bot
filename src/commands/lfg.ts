@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   type ButtonInteraction,
   ButtonStyle,
@@ -7,10 +8,13 @@ import {
   type ChatInputCommandInteraction,
   EmbedBuilder,
   type Guild,
+  MessageFlags,
   SlashCommandBuilder,
   type TextChannel,
   userMention,
 } from "discord.js";
+import { readdirSync } from "node:fs";
+import path from "node:path";
 import type { LfgQueue } from "../lfg/queue";
 import type { LfgLeaderboardStore } from "../lfg/leaderboard";
 import { FORMATS, type LfgFormat } from "../lfg/types";
@@ -55,6 +59,22 @@ export const lfgCommandData = new SlashCommandBuilder()
     subcommand.setName("status").setDescription("View your queue status"),
   )
   .addSubcommand((subcommand) =>
+    subcommand.setName("me").setDescription("View your match count summary"),
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName("history")
+      .setDescription("Show recent matches found")
+      .addIntegerOption((option) =>
+        option
+          .setName("limit")
+          .setDescription("How many recent matches to show")
+          .setRequired(false)
+          .setMinValue(1)
+          .setMaxValue(20),
+      ),
+  )
+  .addSubcommand((subcommand) =>
     subcommand
       .setName("leaderboard")
       .setDescription("Show players with the most matches found")
@@ -89,7 +109,7 @@ export async function handleLfgCommand(
   if (!interaction.inGuild()) {
     await interaction.reply({
       content: "This command can only be used in a server.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -98,7 +118,7 @@ export async function handleLfgCommand(
   if (!guildId) {
     await interaction.reply({
       content: "This command can only be used in a server.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -106,7 +126,7 @@ export async function handleLfgCommand(
   if (interaction.user.bot) {
     await interaction.reply({
       content: "Bots cannot use this queue.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -125,14 +145,14 @@ export async function handleLfgCommand(
     if (result.kind === "not_queued") {
       await interaction.reply({
         content: "You are not currently in any LFG queue.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     await interaction.reply({
       content: `**Left queue:** ${formatDisplay(result.format)}`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     await refreshPanelIfTracked(interaction.guild, context);
     return;
@@ -149,7 +169,51 @@ export async function handleLfgCommand(
       lines.push("Not currently queued.");
     }
 
-    await interaction.reply({ content: lines.join("\n"), ephemeral: true });
+    await interaction.reply({ content: lines.join("\n"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (subcommand === "me") {
+    const summary = context.leaderboardStore.getUserSummary(guildId, interaction.user.id);
+    const lines = [
+      "**📈 Your Match Counts**",
+      "```",
+      `🔢 Total:        ${summary.totalCount}`,
+      `🛠️ Constructed:  ${summary.byFormat.constructed}`,
+      `📦 Sealed:       ${summary.byFormat.sealed}`,
+      `👥 Multiplayer:  ${summary.byFormat.multiplayer}`,
+      "```",
+    ];
+    await interaction.reply({ content: lines.join("\n"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (subcommand === "history") {
+    const limit = interaction.options.getInteger("limit") ?? 10;
+    const matches = context.leaderboardStore.getRecentMatches(guildId, limit);
+
+    if (matches.length === 0) {
+      await interaction.reply({ content: "No match history yet." });
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("Recent Matches")
+      .setColor(0x57f287)
+      .setDescription(
+        matches
+          .map((match) => {
+            const players = match.userIds.map((id) => `<@${id}>`).join(", ");
+            const timestamp = Math.floor(match.matchedAt / 1000);
+            return `- <t:${timestamp}:R> • **${formatDisplay(match.format)}** • ${players}`;
+          })
+          .join("\n"),
+      );
+
+    await interaction.reply({
+      embeds: [embed],
+      allowedMentions: { parse: [] },
+    });
     return;
   }
 
@@ -194,9 +258,11 @@ export async function handleLfgCommand(
       "- `/lfg join constructed|sealed|multiplayer`",
       "- `/lfg leave`",
       "- `/lfg status`",
+      "- `/lfg me`",
+      "- `/lfg history [limit]`",
       "- `/lfg leaderboard [format] [limit]`",
     ].join("\n"),
-    ephemeral: true,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -212,7 +278,7 @@ export async function handleLfgButtonInteraction(
   if (!guildId) {
     await interaction.reply({
       content: "This interaction can only be used in a server.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -222,14 +288,14 @@ export async function handleLfgButtonInteraction(
     if (result.kind === "not_queued") {
       await interaction.reply({
         content: "You are not currently in any LFG queue.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     await interaction.reply({
       content: `**Left queue:** ${formatDisplay(result.format)}`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     await refreshPanelIfTracked(interaction.guild, context);
     return;
@@ -316,7 +382,7 @@ async function handleJoin(
       content: `You are already queued for ${formatDisplay(format)}.\n**Remaining time:** \`${humanizeDuration(
         result.remainingMs,
       )}\``,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -330,7 +396,7 @@ async function handleJoin(
       content: `${moveLine}\n**Expires in:** \`${humanizeDuration(
         Math.max(0, result.expiresAt - Date.now()),
       )}\``,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
 
     if (announcementChannel) {
@@ -353,6 +419,8 @@ async function handleJoin(
   }
 
   const participantIds = [interaction.user.id, ...result.matchedUserIds];
+  await acknowledgeMatchSilently(interaction);
+
   try {
     context.leaderboardStore.recordMatch(guildId, participantIds, result.format);
   } catch (error) {
@@ -363,11 +431,22 @@ async function handleJoin(
       error,
     });
   }
-  const message = `**Match found:** ${participantIds.map((id) => userMention(id)).join(", ")}\n**Format:** ${formatDisplay(result.format)}`;
+  const message = [
+    `**Match found:** ${participantIds.map((id) => userMention(id)).join(", ")}`,
+    `**Format:** ${formatDisplay(result.format)}`,
+  ].join("\n");
+  const matchGifPath = randomMatchGifPath();
 
   if (announcementChannel) {
     try {
-      await announcementChannel.send(message);
+      if (matchGifPath) {
+        await announcementChannel.send({
+          content: message,
+          files: [new AttachmentBuilder(matchGifPath)],
+        });
+      } else {
+        await announcementChannel.send(message);
+      }
       await bumpPanelToBottom(interaction.guild, context);
     } catch (error) {
       context.logger.warn("Failed to post match announcement.", {
@@ -378,8 +457,6 @@ async function handleJoin(
       });
     }
   }
-
-  await acknowledgeMatchSilently(interaction);
 
   const channelReference = announcementChannel
     ? `<#${announcementChannel.id}>`
@@ -596,11 +673,11 @@ async function acknowledgeMatchSilently(
   interaction: ChatInputCommandInteraction | ButtonInteraction,
 ): Promise<void> {
   if (interaction.isButton()) {
-    await interaction.deferUpdate();
+    await interaction.deferUpdate().catch(() => undefined);
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => undefined);
   await interaction.deleteReply().catch(() => undefined);
 }
 
@@ -662,6 +739,27 @@ function leaderboardLine(index: number, userId: string, matchCount: number): str
     return `🥉 <@${userId}> — **${matchCount}** games`;
   }
   return `${index + 1}. <@${userId}> — **${matchCount}** games`;
+}
+
+function randomMatchGifPath(): string | null {
+  const directory = path.resolve(process.cwd(), "assets", "match-gifs");
+  const files = (() => {
+    try {
+      return readdirSync(directory, { withFileTypes: true })
+        .filter((item) => item.isFile())
+        .map((item) => item.name)
+        .filter((name) => /\.(gif|webp|mp4)$/i.test(name));
+    } catch {
+      return [];
+    }
+  })();
+
+  if (files.length === 0) {
+    return null;
+  }
+
+  const index = Math.floor(Math.random() * files.length);
+  return path.join(directory, files[index]);
 }
 
 export { FORMATS };

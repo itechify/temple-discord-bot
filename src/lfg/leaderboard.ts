@@ -9,8 +9,16 @@ interface MatchCounter {
   byFormat: Record<LfgFormat, number>;
 }
 
+interface RecentMatch {
+  guildId: string;
+  format: LfgFormat;
+  userIds: string[];
+  matchedAt: number;
+}
+
 interface LeaderboardStoreData {
   counters: MatchCounter[];
+  recentMatches: RecentMatch[];
 }
 
 interface LegacyMatchEvent {
@@ -25,8 +33,13 @@ export interface LeaderboardRow {
   matchCount: number;
 }
 
+export interface UserMatchSummary {
+  totalCount: number;
+  byFormat: Record<LfgFormat, number>;
+}
+
 export class LfgLeaderboardStore {
-  private data: LeaderboardStoreData = { counters: [] };
+  private data: LeaderboardStoreData = { counters: [], recentMatches: [] };
   private index = new Map<string, MatchCounter>();
 
   constructor(private readonly dataPath: string) {
@@ -65,6 +78,16 @@ export class LfgLeaderboardStore {
       this.index.set(key, created);
     }
 
+    this.data.recentMatches.push({
+      guildId,
+      format,
+      userIds: [...userIds],
+      matchedAt,
+    });
+    if (this.data.recentMatches.length > 5000) {
+      this.data.recentMatches.splice(0, this.data.recentMatches.length - 5000);
+    }
+
     this.save();
   }
 
@@ -79,6 +102,29 @@ export class LfgLeaderboardStore {
       .sort((a, b) => b.matchCount - a.matchCount || a.userId.localeCompare(b.userId))
       .slice(0, Math.max(1, limit))
       .map((row) => ({ userId: row.userId, matchCount: row.matchCount }));
+  }
+
+  getUserSummary(guildId: string, userId: string): UserMatchSummary {
+    const counter = this.index.get(this.counterKey(guildId, userId));
+    if (!counter) {
+      return {
+        totalCount: 0,
+        byFormat: { constructed: 0, sealed: 0, multiplayer: 0 },
+      };
+    }
+
+    return {
+      totalCount: counter.totalCount,
+      byFormat: { ...counter.byFormat },
+    };
+  }
+
+  getRecentMatches(guildId: string, limit = 10): RecentMatch[] {
+    return this.data.recentMatches
+      .filter((match) => match.guildId === guildId)
+      .sort((a, b) => b.matchedAt - a.matchedAt)
+      .slice(0, Math.max(1, limit))
+      .map((match) => ({ ...match, userIds: [...match.userIds] }));
   }
 
   private load(): LeaderboardStoreData {
@@ -102,11 +148,21 @@ export class LfgLeaderboardStore {
               totalCount: counter.totalCount,
               byFormat: this.normalizeByFormat(counter.byFormat),
             })),
+          recentMatches: Array.isArray(parsed.recentMatches)
+            ? parsed.recentMatches.filter(
+                (match): match is RecentMatch =>
+                  typeof match?.guildId === "string" &&
+                  typeof match?.format === "string" &&
+                  Array.isArray(match?.userIds) &&
+                  match.userIds.every((userId: unknown) => typeof userId === "string") &&
+                  typeof match?.matchedAt === "number",
+              )
+            : [],
         };
       }
 
       if (!Array.isArray(parsed.events)) {
-        return { counters: [] };
+        return { counters: [], recentMatches: [] };
       }
 
       const events = parsed.events.filter(
@@ -119,7 +175,7 @@ export class LfgLeaderboardStore {
 
       return this.aggregateLegacyEvents(events);
     } catch {
-      return { counters: [] };
+      return { counters: [], recentMatches: [] };
     }
   }
 
@@ -153,6 +209,7 @@ export class LfgLeaderboardStore {
 
   private aggregateLegacyEvents(events: LegacyMatchEvent[]): LeaderboardStoreData {
     const counts = new Map<string, MatchCounter>();
+    const recentMatches: RecentMatch[] = [];
 
     for (const event of events) {
       if (!FORMATS.includes(event.format)) {
@@ -179,8 +236,15 @@ export class LfgLeaderboardStore {
       };
       created.byFormat[event.format] = 1;
       counts.set(key, created);
+
+      recentMatches.push({
+        guildId: event.guildId,
+        format: event.format,
+        userIds: [event.userId],
+        matchedAt: event.matchedAt,
+      });
     }
 
-    return { counters: [...counts.values()] };
+    return { counters: [...counts.values()], recentMatches };
   }
 }

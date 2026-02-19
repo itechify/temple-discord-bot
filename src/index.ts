@@ -1,4 +1,12 @@
-import { ChannelType, Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
+import {
+  ChannelType,
+  Client,
+  Events,
+  GatewayIntentBits,
+  MessageFlags,
+  REST,
+  Routes,
+} from "discord.js";
 import { buildFaqEmbeds, extractFaqQueries, loadCardFaqLookup } from "./cards/faq";
 import { buildCardEmbed, extractCardQueries, loadCardLookup } from "./cards/lookup";
 import {
@@ -110,9 +118,13 @@ async function main(): Promise<void> {
 
         const content = "Something went wrong while processing this button.";
         if (interaction.deferred || interaction.replied) {
-          await interaction.followUp({ content, ephemeral: true }).catch(() => undefined);
+          await interaction
+            .followUp({ content, flags: MessageFlags.Ephemeral })
+            .catch(() => undefined);
         } else {
-          await interaction.reply({ content, ephemeral: true }).catch(() => undefined);
+          await interaction
+            .reply({ content, flags: MessageFlags.Ephemeral })
+            .catch(() => undefined);
         }
       }
       return;
@@ -139,9 +151,13 @@ async function main(): Promise<void> {
 
       const content = "Something went wrong while processing this command.";
       if (interaction.deferred || interaction.replied) {
-        await interaction.followUp({ content, ephemeral: true }).catch(() => undefined);
+        await interaction
+          .followUp({ content, flags: MessageFlags.Ephemeral })
+          .catch(() => undefined);
       } else {
-        await interaction.reply({ content, ephemeral: true }).catch(() => undefined);
+        await interaction
+          .reply({ content, flags: MessageFlags.Ephemeral })
+          .catch(() => undefined);
       }
     }
   });

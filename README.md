@@ -7,6 +7,8 @@ Simple Discord bot for a Sorcery TCG server that provides `/lfg` queueing by for
 - `/lfg join format:<constructed|sealed|multiplayer>`
 - `/lfg leave`
 - `/lfg status`
+- `/lfg me`
+- `/lfg history [limit]`
 - `/lfg leaderboard [format] [limit]`
 - `/lfg help`
 - `[[card name]]` lookup in any guild channel (supports multiple per message)
@@ -130,6 +132,16 @@ DMs can fail if users disable DMs from server members; bot handles this graceful
 - Shows only the caller's current queued format and remaining time if queued.
 - If not queued, returns an ephemeral notice.
 
+### `/lfg me`
+
+- Shows your persisted match counts.
+- Includes total plus counts by format.
+
+### `/lfg history [limit]`
+
+- Shows recent match-found events in the server.
+- Optional `limit` controls number of rows (default `10`, max `20`).
+
 ### `/lfg leaderboard [format] [limit]`
 
 - Shows players with the highest match-found counts.
@@ -144,6 +156,8 @@ Ephemeral usage summary:
 - `/lfg join constructed|sealed|multiplayer`
 - `/lfg leave`
 - `/lfg status`
+- `/lfg me`
+- `/lfg history [limit]`
 - `/lfg leaderboard [format] [limit]`
 
 ### Card lookup by message
