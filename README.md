@@ -13,6 +13,7 @@ Simple Discord bot for a Sorcery TCG server that provides `/lfg` queueing by for
 - `/lfg help`
 - `[[card name]]` lookup in any guild channel (supports multiple per message)
 - `[[?card name]]` rulings/FAQ lookup in any guild channel
+- `[[$card name]]` price lookup in any guild channel (supports multiple per message)
 - Queue timeout with auto-cleanup (`QUEUE_TTL_MINUTES`, default `30`)
 - Instant matching when enough players join the same format
 - Persistent local leaderboard count of matches found per player
@@ -49,6 +50,9 @@ cp .env.example .env
 - `QUEUE_TTL_MINUTES`: Queue TTL in minutes (default `30`)
 - `LFG_CHANNEL_NAME`: Must match channel name (default `lfg-sorcery`)
 - `LFG_LEADERBOARD_PATH`: File path for persisted leaderboard data (default `./data/lfg-leaderboard.json`)
+- `TCGCSV_CATEGORY_ID`: TCGCSV category ID for price lookups (default `77` for Sorcery)
+- `TCGCSV_CACHE_MINUTES`: Price cache lifetime in minutes (default `60`)
+- `TCGCSV_MAX_PRINTS`: Max print rows shown per price lookup (default `6`)
 - `EMOJI_AIR`: Card threshold emoji for air (default `🜁`)
 - `EMOJI_EARTH`: Card threshold emoji for earth (default `🜃`)
 - `EMOJI_FIRE`: Card threshold emoji for fire (default `🜂`)
@@ -146,7 +150,7 @@ DMs can fail if users disable DMs from server members; bot handles this graceful
 
 - Shows players with the highest match-found counts.
 - Optional `format` filters by constructed/sealed/multiplayer.
-- Optional `limit` controls number of rows (default `10`, max `25`).
+- Optional `limit` controls number of rows (default `10`, max `20`).
 - Counts are persisted to the leaderboard file path in env.
 
 ### `/lfg help`
@@ -176,6 +180,15 @@ Ephemeral usage summary:
 - Matching is case-insensitive and supports light misspellings.
 - Bot replies in the same channel with FAQ/rulings from `faq.csv`.
 
+### Card prices by message
+
+- Ask for prices with `[[$card name]]`.
+- Example: `[[$Apprentice Wizard]]`
+- Multiple price lookups in one message are supported.
+- Matching is case-insensitive and supports light misspellings.
+- Bot replies in the same channel with recent print prices from TCGCSV/TCGplayer data.
+- Price rows include normal and foil values when available from source data.
+
 ## Project Structure
 
 ```text
@@ -184,6 +197,7 @@ src/
   cards/
     faq.ts
     lookup.ts
+    prices.ts
   commands/
     lfg.ts
   lfg/

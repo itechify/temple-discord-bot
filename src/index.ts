@@ -9,6 +9,7 @@ import {
 } from "discord.js";
 import { buildFaqEmbeds, extractFaqQueries, loadCardFaqLookup } from "./cards/faq";
 import { buildCardEmbed, extractCardQueries, loadCardLookup } from "./cards/lookup";
+import { buildPriceEmbed, extractPriceQueries, TcgCsvPriceLookup } from "./cards/prices";
 import {
   handleLfgButtonInteraction,
   handleLfgCommand,
@@ -26,6 +27,12 @@ async function main(): Promise<void> {
   const leaderboardStore = new LfgLeaderboardStore(env.LFG_LEADERBOARD_PATH);
   const cardLookup = loadCardLookup();
   const cardFaqLookup = loadCardFaqLookup();
+  const priceLookup = new TcgCsvPriceLookup({
+    categoryId: env.TCGCSV_CATEGORY_ID,
+    cacheMinutes: env.TCGCSV_CACHE_MINUTES,
+    maxPrints: env.TCGCSV_MAX_PRINTS,
+    logger,
+  });
   const elementEmojis = {
     air: env.EMOJI_AIR,
     earth: env.EMOJI_EARTH,
@@ -168,8 +175,9 @@ async function main(): Promise<void> {
     }
 
     const faqQueries = extractFaqQueries(message.content);
-    const queries = extractCardQueries(message.content);
-    if (queries.length === 0 && faqQueries.length === 0) {
+    const cardQueries = extractCardQueries(message.content);
+    const priceQueries = extractPriceQueries(message.content);
+    if (cardQueries.length === 0 && faqQueries.length === 0 && priceQueries.length === 0) {
       return;
     }
 
@@ -185,7 +193,7 @@ async function main(): Promise<void> {
         });
       }
 
-      const lookupResults = queries.map((query) => cardLookup.find(query));
+      const lookupResults = cardQueries.map((query) => cardLookup.find(query));
       const embeds = lookupResults.flatMap((result) =>
         result.card ? [buildCardEmbed(result.card, elementEmojis)] : [],
       );
@@ -193,6 +201,18 @@ async function main(): Promise<void> {
       for (let i = 0; i < embeds.length; i += 10) {
         await message.channel.send({
           embeds: embeds.slice(i, i + 10),
+          allowedMentions: { repliedUser: false, parse: [] },
+        });
+      }
+
+      for (const query of priceQueries) {
+        const result = await priceLookup.find(query, cardLookup);
+        if (!result) {
+          continue;
+        }
+
+        await message.channel.send({
+          embeds: [buildPriceEmbed(result)],
           allowedMentions: { repliedUser: false, parse: [] },
         });
       }

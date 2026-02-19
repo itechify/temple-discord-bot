@@ -10,6 +10,9 @@ export interface Env {
   QUEUE_TTL_MINUTES: number;
   LFG_CHANNEL_NAME: string;
   LFG_LEADERBOARD_PATH: string;
+  TCGCSV_CATEGORY_ID: number;
+  TCGCSV_CACHE_MINUTES: number;
+  TCGCSV_MAX_PRINTS: number;
   EMOJI_AIR: string;
   EMOJI_EARTH: string;
   EMOJI_FIRE: string;
@@ -47,6 +50,9 @@ export function loadEnv(): Env {
     LFG_CHANNEL_NAME: process.env.LFG_CHANNEL_NAME?.trim() || "lfg-sorcery",
     LFG_LEADERBOARD_PATH:
       process.env.LFG_LEADERBOARD_PATH?.trim() || "./data/lfg-leaderboard.json",
+    TCGCSV_CATEGORY_ID: integerWithDefault("TCGCSV_CATEGORY_ID", 77),
+    TCGCSV_CACHE_MINUTES: integerWithDefault("TCGCSV_CACHE_MINUTES", 60),
+    TCGCSV_MAX_PRINTS: integerWithDefault("TCGCSV_MAX_PRINTS", 6),
     EMOJI_AIR: process.env.EMOJI_AIR?.trim() || "🜁",
     EMOJI_EARTH: process.env.EMOJI_EARTH?.trim() || "🜃",
     EMOJI_FIRE: process.env.EMOJI_FIRE?.trim() || "🜂",

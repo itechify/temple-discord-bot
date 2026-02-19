@@ -139,7 +139,7 @@ export function extractCardQueries(messageContent: string): string[] {
     if (!query) {
       continue;
     }
-    if (query.startsWith("?") || query.startsWith("!")) {
+    if (query.startsWith("?") || query.startsWith("!") || query.startsWith("$")) {
       continue;
     }
 
