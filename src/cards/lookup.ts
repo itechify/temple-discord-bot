@@ -2,31 +2,31 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { EmbedBuilder } from "discord.js";
 
-interface CardThresholds {
-  air?: number;
-  earth?: number;
-  fire?: number;
-  water?: number;
-}
-
-interface CardGuardian {
-  rarity?: string;
-  type?: string;
-  rulesText?: string;
+// Shape of https://api.sorcerytcg.com/api/cards (refresh with `pnpm run update-data`).
+interface CardEngine {
+  type?: string | null;
+  rarity?: string | null;
+  slot?: string | null;
+  rules?: string | null;
   cost?: number | null;
   attack?: number | null;
-  defence?: number | null;
+  defense?: number | null;
   life?: number | null;
-  thresholds?: CardThresholds | null;
+  air?: number | null;
+  earth?: number | null;
+  fire?: number | null;
+  water?: number | null;
 }
 
-interface CardVariant {
+interface CardPrinting {
   slug?: string;
-  typeText?: string;
-}
-
-interface CardSet {
-  variants?: CardVariant[];
+  printedAt?: string | null;
+  set?: {
+    name?: string | null;
+  } | null;
+  meta?: {
+    typeline?: string | null;
+  } | null;
 }
 
 export interface ElementEmojis {
@@ -38,10 +38,9 @@ export interface ElementEmojis {
 
 export interface CardRecord {
   name: string;
-  elements?: string | null;
-  subTypes?: string | null;
-  guardian: CardGuardian;
-  sets?: CardSet[];
+  slug?: string;
+  engine?: CardEngine | null;
+  printings?: CardPrinting[];
 }
 
 export interface CardLookupResult {
@@ -118,7 +117,7 @@ export function replaceCardReferencesWithLinks(text: string, cardLookup: CardLoo
       return rawMatch;
     }
 
-    return `[${escapeLinkText(result.card.name)}](${buildCuriosaUrl(result.card)})`;
+    return `[${escapeLinkText(result.card.name)}](${buildCardUrl(result.card)})`;
   });
 }
 
@@ -126,6 +125,9 @@ export function loadCardLookup(): CardLookup {
   const cardsPath = path.resolve(__dirname, "..", "..", "cards.json");
   const raw = readFileSync(cardsPath, "utf8");
   const parsed = JSON.parse(raw) as CardRecord[];
+  if (!Array.isArray(parsed) || parsed.length === 0 || !parsed[0]?.engine) {
+    throw new Error("cards.json is not in the expected format. Run `pnpm run update-data`.");
+  }
   return new CardLookup(parsed);
 }
 
@@ -156,12 +158,12 @@ export function extractCardQueries(messageContent: string): string[] {
 }
 
 export function buildCardEmbed(card: CardRecord, elementEmojis: ElementEmojis): EmbedBuilder {
-  const guardian = card.guardian ?? {};
+  const engine = card.engine ?? {};
   const typeText = extractTypeText(card);
-  const combatStats = formatCombatStats(guardian);
-  const lifeStat = formatLifeStat(guardian);
-  const titleResources = formatTitleResources(guardian, elementEmojis);
-  const cardUrl = buildCuriosaUrl(card);
+  const combatStats = formatCombatStats(engine);
+  const lifeStat = formatLifeStat(engine);
+  const titleResources = formatTitleResources(engine, elementEmojis);
+  const cardUrl = buildCardUrl(card);
   const headerLine = titleResources
     ? `**[${escapeLinkText(card.name)}](${cardUrl})** ${titleResources}`
     : `**[${escapeLinkText(card.name)}](${cardUrl})**`;
@@ -180,17 +182,23 @@ export function buildCardEmbed(card: CardRecord, elementEmojis: ElementEmojis): 
     }
     lines.push(`\`${statParts.join("  |  ")}\``);
   }
-  if (guardian.rulesText) {
+  if (engine.rules) {
     lines.push("");
-    lines.push(replaceThresholdSymbols(guardian.rulesText, elementEmojis));
+    lines.push(replaceThresholdSymbols(engine.rules, elementEmojis));
   }
 
-  return new EmbedBuilder().setColor(rarityColor(guardian.rarity)).setDescription(lines.join("\n"));
+  return (
+    new EmbedBuilder()
+      // Avatars have no rarity in the API; their slot ("Unique") keeps the old colour.
+      .setColor(rarityColor(engine.rarity ?? engine.slot ?? undefined))
+      .setDescription(lines.join("\n"))
+  );
 }
 
-export function buildCuriosaUrl(card: CardRecord): string {
-  const slug = extractCuriosaSlugFromCard(card);
-  return `https://curiosa.io/cards/${slug}`;
+// curiosa.io/cards/* now redirects here.
+export function buildCardUrl(card: CardRecord): string {
+  const slug = card.slug || normalizeCardName(card.name).replace(/\s+/g, "_");
+  return `https://sorcerytcg.com/cards/${slug}`;
 }
 
 function normalizeCardName(value: string): string {
@@ -203,27 +211,22 @@ function normalizeCardName(value: string): string {
     .replace(/\s+/g, " ");
 }
 
-function extractCuriosaSlugFromCard(card: CardRecord): string {
-  const variantSlug = card.sets
-    ?.flatMap((set) => set.variants ?? [])
-    .map((variant) => variant.slug)
-    .find((slug): slug is string => Boolean(slug));
-
-  if (variantSlug) {
-    const match = variantSlug.match(/^[^-]+-([^-]+)-/);
-    if (match?.[1]) {
-      return match[1];
-    }
-  }
-
-  return normalizeCardName(card.name).replace(/\s+/g, "_");
-}
-
+// Promo printings often carry joke typelines ("mew to power"), so prefer the
+// earliest regular set printing.
 function extractTypeText(card: CardRecord): string {
+  const rank = (printing: CardPrinting): [number, string] => [
+    printing.set?.name === "Promo" ? 1 : 0,
+    printing.printedAt ?? "",
+  ];
+  const ordered = [...(card.printings ?? [])].sort((a, b) => {
+    const [promoA, dateA] = rank(a);
+    const [promoB, dateB] = rank(b);
+    return promoA - promoB || dateA.localeCompare(dateB);
+  });
+
   return (
-    card.sets
-      ?.flatMap((set) => set.variants ?? [])
-      .map((variant) => variant.typeText?.trim())
+    ordered
+      .map((printing) => printing.meta?.typeline?.trim())
       .find((value): value is string => Boolean(value)) ?? ""
   );
 }
@@ -243,24 +246,19 @@ function escapeLinkText(value: string): string {
   return value.replace(/]/g, "\\]");
 }
 
-function formatTitleResources(guardian: CardGuardian, elementEmojis: ElementEmojis): string {
+function formatTitleResources(engine: CardEngine, elementEmojis: ElementEmojis): string {
   const tokens: string[] = [];
-  const cost = guardian.cost;
+  const cost = engine.cost;
 
   if (cost !== null && cost !== undefined) {
     tokens.push(`(${cost})`);
   }
 
-  const thresholds = guardian.thresholds;
-  if (!thresholds) {
-    return tokens.join(" ");
-  }
-
   const thresholdTokens: Array<[number, string]> = [
-    [thresholds.air ?? 0, elementEmojis.air],
-    [thresholds.earth ?? 0, elementEmojis.earth],
-    [thresholds.fire ?? 0, elementEmojis.fire],
-    [thresholds.water ?? 0, elementEmojis.water],
+    [engine.air ?? 0, elementEmojis.air],
+    [engine.earth ?? 0, elementEmojis.earth],
+    [engine.fire ?? 0, elementEmojis.fire],
+    [engine.water ?? 0, elementEmojis.water],
   ];
 
   for (const [count, emoji] of thresholdTokens) {
@@ -289,8 +287,8 @@ function replaceThresholdSymbols(text: string, elementEmojis: ElementEmojis): st
   });
 }
 
-function formatCombatStats(guardian: CardGuardian): string {
-  const { attack, defence } = guardian;
+function formatCombatStats(engine: CardEngine): string {
+  const { attack, defense: defence } = engine;
   const hasAttack = attack !== null && attack !== undefined;
   const hasDefence = defence !== null && defence !== undefined;
 
@@ -312,9 +310,9 @@ function formatCombatStats(guardian: CardGuardian): string {
   return `${defence}`;
 }
 
-function formatLifeStat(guardian: CardGuardian): number | null {
-  const life = guardian.life;
-  const isAvatar = guardian.type?.trim().toLowerCase() === "avatar";
+function formatLifeStat(engine: CardEngine): number | null {
+  const life = engine.life;
+  const isAvatar = engine.type?.trim().toLowerCase() === "avatar";
   if (!isAvatar || life === null || life === undefined) {
     return null;
   }

@@ -11,7 +11,8 @@
     "start:test": "ENV_FILE=.env.dev node dist/index.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "update-data": "node scripts/update-data.mjs"
   },
   "keywords": [
     "discord",
